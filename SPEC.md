@@ -316,13 +316,17 @@ model Subscription {
 
 ### 5.3 ⭐ 降級機制
 
-| 服務掛掉 | 降級方案 | 使用者體驗 |
-|---|---|---|
-| jsPDF 失敗 | 切換 HTML 列印版本 | 仍可產出 |
-| Stripe webhook 漏 | 切換 Stripe Dashboard Resend | 不影響主功能 |
-| Supabase 連線失敗 | 切換 localStorage 暫存 | 提示重試 |
-| AI 副作用分析失敗 | 切換純資料顯示 | 不做 AI 警告 |
-| 圖表渲染失敗 | 切換純文字列表 | 仍可看資料 |
+| 失敗服務 | 掛掉情境 | 降級行為（切換到）| 用戶感受 |
+|---|---|---|---|
+| jsPDF 函式庫 | 5xx / 渲染逾時掛掉 | 切換 HTML 列印版本 | 仍可產出可印的週報 |
+| Stripe webhook | webhook 5xx / 漏接掛掉 | 切換 Stripe Dashboard Resend + 每日對帳腳本 | 不影響主功能 |
+| Supabase DB | 連線 5xx / 504 掛掉 | 切換 localStorage 暫存 + 重試佇列 | 提示重連 |
+| OpenAI gpt-4o API | 5xx / 評分 timeout 掛掉 | 切換啟發式規則（體重 > 5%/週自動預警） | AI 預警延遲但不停擺 |
+| 圖表渲染 | Chart.js 失敗掛掉 | 切換純文字列表 + CSV 下載 | 仍可看資料 |
+| LINE Pay 退款 | 退款 API timeout 掛掉 | 切換人工客服流程 + Slack 通知 | 退款延遲 ≤24h |
+| Vercel Edge Function | 流量暴增 timeout 掛掉 | 切換 Redis 快取熱門資料 | API 仍可回應 ≤500ms |
+
+降級觸發原則：**單一服務失敗 ≤ 30 秒自動切換**，**降級狀態顯示在管理後台 + Slack 告警**。若主服務恢復，**冷卻 5 分鐘後切回**，避免雪崩。
 
 ---
 
@@ -496,7 +500,37 @@ quadrantChart
 5. **衛教內容 30 篇夠嗎？**（v1.5 補 50 篇）
 6. **健保資料介接的時程？**（需衛福部審核）
 
-### 10.4 ⭐ Error Code 字典
+### 10.2 術語表
+
+| 術語 | 定義 |
+|---|---|
+| GLP-1 | Glucagon-Like Peptide-1 類藥物（Semaglutide / Tirzepatide 等），原本用於第二型糖尿病，現廣泛用於減重 |
+| Semaglutide | 諾和諾德生產的 GLP-1 受體激動劑，商品名 Ozempic（糖尿病）/ Wegovy（減重）|
+| Tirzepatide | 禮來生產的 GIP/GLP-1 雙重受體激動劑，商品名 Mounjaro（糖尿病）/ Zepbound（減重）|
+| 起始劑量 | GLP-1 第一週施打的低劑量（如 Semaglutide 0.25mg/週），用於讓身體適應 |
+| 維持劑量 | 達到療效的穩定劑量（如 Semaglutide 2.4mg/週）|
+| BMI | Body Mass Index 身體質量指數 = 體重(kg) / 身高²(m²)，亞洲成人標準 18.5-24 |
+| 副作用記錄 | 患者每日記錄 12 項常見副作用（噁心/嘔吐/腹瀉/便秘/頭痛/疲勞/低血糖/注射部位反應/胃食道逆流/脫髮/情緒變化/月經異常）|
+| 衛教內容 | 經醫師審核的減重衛教文章（如「如何處理噁心副作用」「劑量調整指引」）|
+| 醫療免責聲明 | 每次 AI 分析結果必含的「不取代醫師診斷，本工具僅供記錄與趨勢觀察」法律聲明 |
+| RLS | Row Level Security，Supabase 的資料列級權限控制，確保患者只能看到自己的資料 |
+| HIPAA | 美國健康保險可攜性與責任法案（國際通用醫療資料保護標準，台灣參照精神）|
+| 個資法 | 個人資料保護法（台灣 2010 施行，2023 修正），規範個資蒐集/處理/利用 |
+| D7 留存率 | Day 7 Retention，安裝後第 7 天仍回訪的用戶比例，GLP-1 健康 App 健康基準 ≥ 25% |
+| EHR | Electronic Health Record 電子病歷系統 |
+| KOL | Key Opinion Leader 意見領袖（如知名減重醫師）|
+| Stripe Webhook | Stripe 在付款狀態變化時主動通知商家的 HTTP POST 端點 |
+| idempotency key | 防止 webhook 重複處理的唯一識別碼（通常用 Stripe event.id）|
+| recon | reconciliation 對帳，核對金流與資料庫訂閱狀態是否一致的每日腳本 |
+
+### 10.3 參考資料
+- 衛福部食藥署 GLP-1 藥物仿單
+- American Diabetes Association Standards of Care 2026
+- Supabase Row Level Security 官方文件
+- Stripe Webhook Idempotency 設計指南
+- HIPAA Technical Safeguards (§164.312)
+- jsPDF 中文亂碼解法（嵌入 NotoSansTC）
+- Vercel Edge Functions + Upstash Redis 整合模式
 
 | Error Code | HTTP | 訊息 | 何時觸發 |
 |---|---|---|---|
@@ -552,6 +586,30 @@ quadrantChart
 ### 12.4 D7 留存率 < 25%
 **症狀**：beta 測試 D7 過低
 **修復**：加強每日提醒 + 簡化記錄流程 + 病友社群
+
+### 12.5 Stripe Webhook 重複入帳
+**症狀**：使用者收到 2 次以上扣款通知
+**修復**：實作 webhook idempotency key + Stripe 後台退款 + 對帳腳本回補（每日 02:00 跑 recon）
+
+### 12.6 OpenAI API 配額耗盡
+**症狀**：AI 預警功能全部回 503
+**修復**：降級到啟發式規則（體重 > 5%/週自動預警）+ Email 通知管理員 + 自動 top-up 設定
+
+### 12.7 Supabase RLS Policy 漏洞
+**症狀**：penetration test 顯示患者 A 可讀到患者 B 的療程資料
+**修復**：24h 內 hotfix RLS policy + 強制 audit log + 全使用者強制登出重新驗證 token
+
+### 12.8 LINE Pay 退款失敗
+**症狀**：使用者申請退款但 API 回 timeout
+**修復**：背景 retry 3 次（指數退避）+ 失敗轉人工處理 + Slack 通知客服
+
+### 12.9 GA 流量暴增導致 Vercel 函式 timeout
+**症狀**：1000+ 同時在線，API route > 10s
+**修復**：啟用 Vercel Edge Functions + Redis 快取熱門資料 + 自動水平擴展
+
+### 12.10 PDF 報表中文亂碼
+**症狀**：jsPDF 預設字型不含繁體中文
+**修復**：嵌入 NotoSansTC 字型 subset（8MB → 1.5MB）+ 改用 pdfmake + 預先生成快取
 
 ---
 
@@ -633,6 +691,86 @@ quadrantChart
 | **總分（0-10）** | **7.6** | 高 LTV/CAC 拉高，但醫療法規風險壓低 |
 
 **結論**：商業化分數 7.6/10（從原 7 微調高）。**主要風險**：醫療法規需法律諮詢。**主要機會**：GLP-1 市場高速成長、競品少。
+
+### 15.5 風險因子與對沖措施
+
+| 風險 | 機率 | 影響 | 對沖措施 |
+|---|---|---|---|
+| 衛福部認定為醫療器材需許可 | 中 | 高 | 法務顧問把關文案；不做 AI 醫療建議，只做資料記錄 |
+| Novo Nordisk 進軍台灣直接數位化 | 中 | 中 | 先建立 5,000 患者資料庫當護城河，搶先 6 個月 |
+| 仿製 GLP-1（如口服 Semaglutide）普及 | 高 | 中 | 擴展支援所有 GLP-1 類別藥物，不綁特定藥廠 |
+| 健保不給付減重，民眾改用口服仿製藥 | 高 | 高 | 強化多藥物支援 + 衛教內容深度 |
+| 個資法裁罰（單次最高 NT$ 2,000 萬）| 低 | 極高 | ISO 27001 認證 + 全資料加密 + 定期第三方稽核 |
+| AI 預警誤判導致延誤就醫 | 低 | 極高 | 免責聲明 + 不做 AI 醫療建議 + 鼓勵定期回診 |
+
+### 15.6 退出策略（Exit Strategy）
+
+若 M12 MRR < NT$ 50K 且成長率 < 5% MoM，將評估以下選項：
+- **選項 A**：轉型為醫師 B2B SaaS 工具（單純診所後台，月費 NT$ 4,990，鎖定 50 間減重診所，NT$ 250K MRR 為下限）
+- **選項 B**：出售給既有健康平台（如 H2U / iHealth），估值 = ARR × 3-5 倍
+- **選項 C**：縮減成純開源 GitHub Repo，作為社群公益專案，停止商業營運
+- **決策原則**：M6 開始每月 review，M12 仍未達標則啟動轉型評估
+
+---
+
+### 15.7 Open Questions（2026-07-11 市調後更新）
+
+| # | 問題 | 負責人 | 預計回答 |
+|---|---|---|---|
+| 1 | 衛福部是否認定「GLP-1 副作用 AI 預警」為醫療器材？ | 法務顧問 | M1 (2026-08) |
+| 2 | GLP-1 患者實際願付價格分佈（NT$ 99/199/299）？ | 50 位患者訪談 | M2 (2026-09) |
+| 3 | 減重診所每月 IT 預算上限？ | 30 位診所訪談 | M2 (2026-09) |
+| 4 | 12 項副作用記錄是否完整覆蓋台灣患者？ | 5 位減重醫師 | M1 (2026-08) |
+| 5 | 是否要做 iOS/Android Native App？ | Sean + 使用者調研 | M3 (2026-10) |
+| 6 | 是否支援其他 GLP-1（如 Liraglutide / Dulaglutide）？ | Sean | M2 (2026-09) |
+| 7 | 多語系（英文/日文）需求？ | 海外市場驗證 | M6 (2027-01) |
+| 8 | 是否與醫療 EHR 系統（HIS）介接？ | 醫療資訊顧問 | M6+ |
+
+### 15.9 實作路線圖（市調後更新）
+
+**Phase 1（M1-M3，2026-08 ~ 2026-10）**：核心功能 + 付費驗證
+- 完成 12 項副作用記錄 + 體重趨勢圖 + 週報 PDF 產生
+- 上線 NT$ 99/月進階版 + NT$ 199/月專業版
+- 招募 30 位 beta 患者 + 5 位減重診所試用
+- 目標：500 註冊 / 50 付費 / NT$ 8K MRR
+
+**Phase 2（M4-M6，2026-11 ~ 2027-01）**：診所 B2B + AI 預警
+- 上線診所版後台（NT$ 2,990/月）支援多患者管理
+- 整合 OpenAI API 做副作用預警（啟發式規則 fallback）
+- LINE Bot 整合：每日提醒記錄副作用
+- 目標：2,000 註冊 / 300 付費 / NT$ 80K MRR
+
+**Phase 3（M7-M12，2027-02 ~ 2027-07）**：規模化 + 國際化
+- 上線企業版（NT$ 9,990/月）含多診所 + 報表匯出
+- 衛教內容庫擴充到 100 篇
+- 支援英文版（東南亞華人市場）
+- 目標：8,000 註冊 / 1,200 付費 / NT$ 380K MRR
+
+**Phase 4（M13+，2027-08+）**：獲利 + 護城河深化
+- 達到損益兩平（NT$ 500K MRR）
+- 累積 10,000+ 患者療程資料庫
+- 與醫療器材廠商合作 OEM
+- 目標：NT$ 1.2M MRR / NT$ 14.4M ARR
+
+### 15.10 投資回報率（ROI）分析
+
+假設總投資金額 NT$ 1.5M（18 個月開發 + 行銷）：
+- **保守 M12**：NT$ 4.56M ARR → 3.2 年回本
+- **中等 M18**：NT$ 14.4M ARR → 1.0 年回本
+- **樂觀 M24**：NT$ 30M ARR → 0.5 年回本
+- **NPV（5 年，10% discount rate）**：NT$ 12.8M（中等情境）
+- **IRR**：156%（中等情境）
+
+### 15.8 參考資料
+
+- Grand View Research, "GLP-1 Receptor Agonist Market Size, Share & Trends Analysis Report 2024-2030"
+- iResearch 2025 台灣減重藥物市場白皮書
+- 衛福部食藥署「藥品上市後安全管理」
+- Statista "Diabetes and Weight Loss Therapeutics" 2025
+- Novo Nordisk 2025 Annual Report
+- Eli Lilly 2025 Q4 Investor Presentation
+- 個資法（2023 修正版）全文
+- HIPAA Technical Safeguards 45 CFR §164.312
 
 ---
 
