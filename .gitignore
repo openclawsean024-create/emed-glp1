@@ -36,3 +36,4 @@ playwright/.cache/
 
 # logs
 *.log
+.env*
