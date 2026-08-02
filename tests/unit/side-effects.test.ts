@@ -33,10 +33,10 @@ describe("side-effects / analyzer (PRD §3 FR-002 AC-002 + §5.2 危機語言)",
       build({ symptom: "headache", severity: "severe" }),
     ];
     const s = summaryBySymptom(records);
-    expect(s.nausea.count).toBe(2);
-    expect(s.headache.count).toBe(1);
-    expect(s.nausea.severeCount).toBe(0);
-    expect(s.headache.severeCount).toBe(1);
+    expect(s.nausea!.count).toBe(2);
+    expect(s.headache!.count).toBe(1);
+    expect(s.nausea!.severeCount).toBe(0);
+    expect(s.headache!.severeCount).toBe(1);
   });
 
   it("urgentCta triggers on any severe entry", () => {
