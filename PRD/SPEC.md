@@ -1,9 +1,171 @@
-# eMed GLP-1 健康管理平台 — 規格計劃書 v3.0
+# eMed GLP-1 健康管理平台 — 規格計劃書 v3.0.2（v3.0 產品層 + v3.0.2 基礎設施層）
 
-> **版本**：v3.0｜**更新日期**：2026-07-19｜**維護者**：Sophia (CPO)｜**對接技術**：Alan (CTO)
-> **對應 GitHub**：[openclawsean024-create/emed-glp1/blob/main/PRD/SPEC.md](https://github.com/openclawsean024-create/emed-glp1/blob/main/PRD/SPEC.md)
-> **對應 skill**：`write-prd-v3` v3.0
-> **目前狀態**：v1.0 landing page + dashboard + medications / injection / side-effects 頁面已實作（純前端，無後端/Auth/Stripe），Phase 1 完成
+> **本檔雙層結構**：
+> - **§A1–§A15 為既有 v3.0 產品規格層**（Sophia CPO 撰寫，2026-07-19 frozen）— 描述**做什麼、為誰做、商業邏輯、產品 FR/NFR**
+> - **§B1–§B9 為 v3.0.2 基礎設施規格層**（Sean 10-repo-fleet 補完，2026-09-06）— 描述**repo 怎麼被 build / test / lint / deploy**
+>
+> 版本：v3.0.2（infra layer）on v3.0（product layer）｜更新日期：2026-09-06｜維護者：Sean Li
+> 對應 skill：`write-prd-v3` v3.0
+> 目前狀態：v1.0 landing + dashboard + medications + assessment + pricing 頁已實作，副作用 / 體重 / PDF / 衛教庫 v1.5 規劃中
+
+---
+
+# §B. v3.0.2 基礎設施規格層（Sean 10-repo-fleet 補完）
+
+## §B1. Repo 概述
+本 repo 為 GLP-1 減重療法的**純前端追蹤 + 衛教平台**（Next.js 16 + TypeScript + Tailwind 4 + jsPDF + Recharts）。Phase 1（v1.0）landing/dashboard/medications/assessment/pricing 已實作；Phase 2（v1.5）副作用記錄/體重/PDF/Supabase/Stripe 規劃中。
+
+### §B1.1 部署狀態
+- **Live**：Vercel（已部署 production URL 200 OK）
+- **GitHub Pages**：has_pages=false
+- **Backend**：純前端（v1.0），v1.5 規劃 Supabase + Stripe
+- **AI**：本 repo **不做 AI 診斷**（ADR-001，醫療法規）
+
+### §B1.2 程式碼結構
+```
+/
+├── src/
+│   ├── app/              # Next.js App Router
+│   │   ├── page.tsx      # landing
+│   │   ├── assessment/   # 自我評估
+│   │   ├── consultation/ # 客服頁
+│   │   ├── dashboard/    # 療程總覽
+│   │   ├── medications/  # 藥物/劑量
+│   │   ├── pricing/      # 訂閱
+│   │   └── api/          # API routes
+│   ├── components/       # 2: Footer / Navigation
+│   ├── data/             # education-library.ts (30+ 篇衛教)
+│   ├── lib/              # 7 模組: api/auth/db/education/pdf/reliability/side-effects/treatments/weights
+│   └── types/            # TS types
+├── tests/
+│   ├── setup.ts          # vitest global setup
+│   └── unit/             # 11 個 unit test 檔
+├── supabase/migrations/  # DB schema
+├── public/               # static assets
+├── dashboard.html        # legacy 入口（已切換 Next.js 為主）
+├── next.config.ts
+├── vitest.config.ts      # vitest + jsdom + @/ alias
+├── playwright.config.ts  # E2E 框架（v1.5）
+├── eslint.config.mjs     # ESLint 9 flat config
+├── tailwind v4           # PostCSS plugin
+└── package.json          # npm scripts: dev/build/start/lint/test/test:watch/test:coverage/test:e2e
+```
+
+## §B2. Definition of Done（v3.0.2 基礎設施層）
+- [x] v3.0 產品規格保留完整（不可刪）
+- [x] GHA CI workflow（4 jobs: lint/test/build/deploy）
+- [x] `npm run lint` 0 error
+- [x] `npm test`（vitest）全綠
+- [x] `npm run build`（next build）綠
+- [x] CHANGELOG.md 記錄 v3.0.2 變更
+- [x] `.gitignore` 補完
+- [x] README 反映現況
+- [x] Repo push 至 main
+
+## §B3. Functional Requirements（基礎設施層）
+| ID | 功能 | 優先級 | 狀態 |
+|---|---|---|---|
+| FR-INF-001 | GHA CI 4-job pipeline | P0 | ✅ shipped |
+| FR-INF-002 | Node.js 20 + pnpm/npm 10 | P0 | ✅ shipped |
+| FR-INF-003 | ESLint 9 flat config | P0 | ✅ shipped |
+| FR-INF-004 | Vitest unit tests（11 個檔）| P0 | ✅ shipped |
+| FR-INF-005 | Playwright E2E 框架 | P1 | ✅ shipped |
+| FR-INF-006 | Next.js 16 build | P0 | ✅ shipped |
+| FR-INF-007 | CHANGELOG.md 維護 | P1 | ✅ shipped |
+
+## §B4. Non-Functional Requirements（基礎設施層）
+| 維度 | 需求 |
+|---|---|
+| Performance | next build 完成 < 60s（CI timeout 設 5 分鐘緩衝） |
+| Security | 無個資蒐集（v1.0 純前端），v1.5 規劃 Supabase RLS + bcrypt 12 |
+| Privacy | 醫療等級（v1.5 規劃：health data AES-256 + TLS） |
+| Accessibility | WCAG 2.1 AA（既有 Tailwind + shadcn/ui） |
+| Browser | Modern evergreen（Next.js 16 預設） |
+| Cost | Vercel Hobby $0 + pnpm/npm 公開套件 |
+| Type Safety | TypeScript strict mode |
+
+## §B5. 技術架構
+```
+[瀏覽器]
+  ↓ HTTP/HTTPS
+[Vercel Edge / Next.js 16 SSR]
+  ├── App Router pages (RSC + Client Components)
+  ├── API routes (v1.0 localStorage; v1.5 Supabase)
+  └── Static assets
+  ↓ (v1.5)
+[Supabase PostgreSQL + RLS]
+[Stripe Checkout + Webhook]
+  ↓ (v1.5)
+[jsPDF 客戶端]           # 週報 PDF
+[Recharts]              # 體重趨勢圖
+[Zod]                   # schema validation
+[bcryptjs]              # 密碼雜湊 (v1.5)
+```
+
+### §B5.1 Module Map
+- `src/app/` — Next.js 16 App Router（RSC + Client Components）
+- `src/components/` — 共用 React 元件（Footer, Navigation）
+- `src/lib/` — 7 個 domain lib：api / auth / db / education / pdf / reliability / side-effects / treatments / weights
+- `src/data/education-library.ts` — 30+ 篇衛教文章
+- `src/types/` — TS type definitions
+- `tests/unit/` — 11 個 vitest 單元測試
+- `supabase/migrations/` — DB schema migrations
+- `.github/workflows/ci.yml` — GHA CI（v3.0.2 新增）
+
+### §B5.2 環境變數（v1.0 純前端，無；v1.5 規劃）
+- v1.0：無
+- v1.5：Supabase URL/anon key、Stripe publishable key、OpenAI key（皆走 `.env.local`，不入 git）
+- GHA secrets：`VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`（用於 deploy job）
+
+### §B5.3 降級策略（基礎設施層）
+- `npm install` 失敗 → GHA 不擋，使用 cache fallback
+- `next build` 失敗 → 阻擋 deploy
+- vitest 失敗 → 阻擋 deploy
+- ESLint 失敗 → 阻擋 deploy（本 repo 有 config）
+
+## §B6. Definition of Done（v3.0.2 補完確認）
+- [x] GHA `.github/workflows/ci.yml` 4 jobs 全綠
+- [x] `PRD/CHANGELOG.md` 記錄 v3.0.2 條目
+- [x] `.gitignore` 補完
+- [x] README 反映現況
+- [x] Repo push 至 main
+- [x] `npm install` 成功
+- [x] `npm test` 11 個 unit test 全綠
+- [x] `npm run build` 綠
+- [x] `npm run lint` 0 error
+
+## §B7. 部署契約
+| 環境 | 目標 | 觸發 |
+|---|---|---|
+| Production | Vercel | push to main |
+| Preview | Per-PR | PR opened（Vercel GitHub App 自動） |
+
+### §B7.1 GHA Workflow
+- `.github/workflows/ci.yml`
+- jobs: **lint**（eslint）/ **test**（vitest run）/ **build**（next build）/ **deploy**（Vercel）
+- triggers: push / PR / workflow_dispatch
+- secrets: `VERCEL_TOKEN` / `VERCEL_ORG_ID` / `VERCEL_PROJECT_ID`（設在 GitHub repo secrets）
+
+### §B7.2 環境變數
+- 純前端（v1.0）：無需 secret
+- v1.5：需在 GHA 加 `SUPABASE_*` / `STRIPE_*` / `OPENAI_API_KEY` secrets
+
+## §B8. Out of Scope（v3.0.2 基礎設施層不做）
+- 不做新產品功能（v3.0 產品層 frozen）
+- 不做 v1.5 後端（Supabase / Stripe / Auth）— 屬 §A3.2 範疇
+- 不做 AI 診斷（ADR-001 醫療法規）
+- 不做健保申報（§A1.5 Non-Goals）
+- 不做多語系 i18n
+- 不改既有測試邏輯（只補綠 + 補缺的）
+
+## §B9. 變更日誌
+見 [`PRD/CHANGELOG.md`](CHANGELOG.md)
+
+---
+
+# §A. v3.0 產品規格層（frozen, 2026-07-19）
+
+> 以下為 v3.0 既有內容，由 Sophia (CPO) 撰寫，2026-07-19 frozen。v3.0.2 不修改 §A 任何內容。
 
 ---
 
